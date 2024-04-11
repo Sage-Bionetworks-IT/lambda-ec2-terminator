@@ -47,6 +47,25 @@ def mock_instance_response():
 
 
 @pytest.fixture()
+def mock_ignore_tag_response():
+    return {
+        'Reservations': [
+            {
+                'Instances': [
+                    {
+                        'InstanceId': 'ignore-instance',
+                        'State': {'Name': 'running'},
+                        'Tags': [{
+                            'Key': app.IGNORE_TAG_KEY,
+                            'Value': app.IGNORE_TAG_VALUE,
+                        }]
+                    }
+                ]
+            }
+        ]
+    }
+
+@pytest.fixture()
 def mock_no_instances_response():
     return {
         'Reservations': [],
@@ -148,6 +167,24 @@ def test_no_instances(mocker,
     with Stubber(stub_ec2_client) as stubber:
         stubber.add_response('describe_regions', mock_region_response)
         stubber.add_response('describe_instances', mock_no_instances_response)
+        ret = app.lambda_handler(None, None)
+    data = json.loads(ret["body"])
+
+    assert ret["statusCode"] == 200
+    assert "message" in ret["body"]
+    assert data["message"] == "No running or stopped instances found"
+
+
+def test_ignore_instance(mocker,
+                         stub_ec2_client,
+                         mock_region_response,
+                         mock_ignore_tag_response):
+    magic_client = mocker.MagicMock(return_value=stub_ec2_client)
+    mocker.patch('boto3.client', magic_client)
+
+    with Stubber(stub_ec2_client) as stubber:
+        stubber.add_response('describe_regions', mock_region_response)
+        stubber.add_response('describe_instances', mock_ignore_tag_response)
         ret = app.lambda_handler(None, None)
     data = json.loads(ret["body"])
 

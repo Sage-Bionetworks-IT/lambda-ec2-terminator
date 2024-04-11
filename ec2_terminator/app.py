@@ -6,11 +6,16 @@ import time
 import boto3
 
 
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s %(levelname)s %(message)s')
+LOG = logging.getLogger(__name__)
+LOG.setLevel(logging.DEBUG)
+
 for lib in ["botocore", "urllib3"]:
     log = logging.getLogger(lib)
     log.setLevel(logging.WARNING)
+
+
+IGNORE_TAG_KEY = 'ec2-terminator:ignore'
+IGNORE_TAG_VALUE= 'ignore'
 
 
 def list_regions():
@@ -19,7 +24,7 @@ def list_regions():
     region_desc = client.describe_regions()
     regions = [region['RegionName'] for region in region_desc['Regions']]
 
-    logging.debug(f"Regions: {regions}")
+    LOG.debug(f"Regions: {regions}")
     return regions
 
 
@@ -40,36 +45,49 @@ def list_instances(region):
         for rsvp in page['Reservations']:
             for ec2 in rsvp['Instances']:
                 ec2_id = ec2['InstanceId']
-                logging.debug(f"EC2: {ec2}")
+                LOG.debug(f"EC2: {ec2}")
+
+                # check for ignore tag
+                ignore = False
+                if 'Tags' in ec2:
+                    for tag in ec2['Tags']:
+                        if tag['Key'] == IGNORE_TAG_KEY \
+                                and tag['Value'] == IGNORE_TAG_VALUE:
+                            ignore = True
+                            break
+                if ignore:
+                    LOG.debug(f"Ignoring instance {ec2_id}")
+                    continue
+
                 instances.append(ec2_id)
 
-    logging.debug(f"Instances found: {instances}")
+    LOG.debug(f"Instances found: {instances}")
     return instances
 
 
 def stop_instances(instances, region):
     """Stop all given instances"""
-    client = boto3.client(region_name=region)
+    client = boto3.client('ec2', region_name=region)
 
     stopped = []
     resp = client.stop_instances(InstanceIds=instances)
     if resp['StoppingInstances']:
         stopped = [s['InstanceId'] for s in resp['StoppingInstances']]
 
-    logging.debug(f"Stopped: {stopped}")
+    LOG.debug(f"Stopped: {stopped}")
     return stopped
 
 
 def terminate_instances(instances, region):
     """Terminate all given instances"""
-    client = boto3.client(region_name=region)
+    client = boto3.client('ec2', region_name=region)
 
     terminated = []
     resp = client.terminate_instances(InstanceIds=instances)
     if resp['TerminatingInstances']:
         terminated = [t['InstanceId'] for t in resp['TerminatingInstances']]
 
-    logging.debug(f"Terminated :{terminated}")
+    LOG.debug(f"Terminated :{terminated}")
     return terminated
 
 
@@ -112,22 +130,22 @@ def lambda_handler(event, context):
 
         # Iterate over every region
         for region in regions:
-            logging.info(f"Region: {region}")
+            LOG.info(f"Region: {region}")
             ec2_instances = list_instances(region)
 
             # Stop or terminate any instances found
             if ec2_instances:
                 found = True
                 if ec2_action == 'terminate':
-                    logging.info(f"Terminating Instances: {ec2_instances}")
+                    LOG.info(f"Terminating Instances: {ec2_instances}")
                     terminated = terminate_instances(ec2_instances, region)
                     processed.extend(terminated)
                 else:
-                    logging.info(f"Stopping Instances: {ec2_instances}")
+                    LOG.info(f"Stopping Instances: {ec2_instances}")
                     stopped = stop_instances(ec2_instances, region)
                     processed.extend(stopped)
             else:
-                logging.debug("No instances found")
+                LOG.debug("No instances found")
 
         # Report results
         if found and not processed:
@@ -139,7 +157,7 @@ def lambda_handler(event, context):
         else:
             message = f"Instances stopped: {processed}"
 
-        logging.info(message)
+        LOG.info(message)
         return {
             "statusCode": 200,
             "body": json.dumps({
@@ -148,7 +166,7 @@ def lambda_handler(event, context):
         }
 
     except Exception as exc:
-        logging.exception(exc)
+        LOG.exception(exc)
         return {
             "statusCode": 500,
             "body": json.dumps({
