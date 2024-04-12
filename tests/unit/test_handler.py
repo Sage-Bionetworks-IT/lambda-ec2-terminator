@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 
@@ -64,6 +65,25 @@ def mock_ignore_tag_response():
             }
         ]
     }
+
+
+
+@pytest.fixture()
+def mock_ignore_age_response():
+    return {
+        'Reservations': [
+            {
+                'Instances': [
+                    {
+                        'InstanceId': 'ignore-instance',
+                        'State': {'Name': 'running'},
+                        'LaunchTime': datetime.datetime.now()
+                    }
+                ]
+            }
+        ]
+    }
+
 
 @pytest.fixture()
 def mock_no_instances_response():
@@ -175,10 +195,10 @@ def test_no_instances(mocker,
     assert data["message"] == "No running or stopped instances found"
 
 
-def test_ignore_instance(mocker,
-                         stub_ec2_client,
-                         mock_region_response,
-                         mock_ignore_tag_response):
+def test_ignore_tag_instance(mocker,
+                             stub_ec2_client,
+                             mock_region_response,
+                             mock_ignore_tag_response):
     magic_client = mocker.MagicMock(return_value=stub_ec2_client)
     mocker.patch('boto3.client', magic_client)
 
@@ -192,6 +212,23 @@ def test_ignore_instance(mocker,
     assert "message" in ret["body"]
     assert data["message"] == "No running or stopped instances found"
 
+
+def test_ignore_age_instance(mocker,
+                             stub_ec2_client,
+                             mock_region_response,
+                             mock_ignore_age_response):
+    magic_client = mocker.MagicMock(return_value=stub_ec2_client)
+    mocker.patch('boto3.client', magic_client)
+
+    with Stubber(stub_ec2_client) as stubber:
+        stubber.add_response('describe_regions', mock_region_response)
+        stubber.add_response('describe_instances', mock_ignore_age_response)
+        ret = app.lambda_handler(None, None)
+    data = json.loads(ret["body"])
+
+    assert ret["statusCode"] == 200
+    assert "message" in ret["body"]
+    assert data["message"] == "No running or stopped instances found"
 
 def test_terminate_failed(mocker,
                           stub_ec2_client,

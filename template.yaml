@@ -46,7 +46,7 @@ Resources:
       PolicyDocument:
         Version: 2012-10-17
         Statement:
-          - Sid: ManageVolumes
+          - Sid: ManageInstances
             Effect: Allow
             Resource: "*"
             Action:

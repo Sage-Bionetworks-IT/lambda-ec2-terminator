@@ -1,7 +1,7 @@
+import datetime
 import json
 import logging
 import os
-import time
 
 import boto3
 
@@ -55,6 +55,15 @@ def list_instances(region):
                                 and tag['Value'] == IGNORE_TAG_VALUE:
                             ignore = True
                             break
+
+                # also skip instances less than an hour old
+                if not ignore and 'LaunchTime' in ec2:
+                    launch = ec2['LaunchTime']
+                    now = datetime.datetime.now(launch.tzinfo)
+                    age = now - launch
+                    if age < datetime.timedelta(hours=1):
+                        ignore = True
+
                 if ignore:
                     LOG.debug(f"Ignoring instance {ec2_id}")
                     continue

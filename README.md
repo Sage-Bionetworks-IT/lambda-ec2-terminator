@@ -10,13 +10,19 @@ Protection should be used to prevent instances from being effected.
 
 ### Parameters
 
-| Parameter Name | Default Value | Allowed Values        |
-|----------------|---------------|-----------------------|
-| Ec2Action      | "STOP"        | "STOP" or "TERMINATE" |
+| Parameter Name | Default Value      | Allowed Values        |
+|----------------|--------------------|-----------------------|
+| Ec2Action      | "STOP"             | "STOP" or "TERMINATE" |
+| Schedule       | cron(0 2 * * ? \*) | EventBridge schedule  |
 
 #### Ec2Action
 
 The EC2 action to take on running instances: either stop or terminate.
+
+#### Schedule
+
+When to run the lambda, the default is daily at 2am UTC. Must be an EventBridge schedule.
+Format details: https://docs.aws.amazon.com/scheduler/latest/UserGuide/schedule-types.html
 
 ### Running
 
