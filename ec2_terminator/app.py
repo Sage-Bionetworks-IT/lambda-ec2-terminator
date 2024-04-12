@@ -74,30 +74,33 @@ def list_instances(region):
     return instances
 
 
-def stop_instances(instances, region):
-    """Stop all given instances"""
+def set_instance_state(instances, state, region):
     client = boto3.client('ec2', region_name=region)
 
-    stopped = []
-    resp = client.stop_instances(InstanceIds=instances)
-    if resp['StoppingInstances']:
-        stopped = [s['InstanceId'] for s in resp['StoppingInstances']]
+    action = ''
+    resp_key = None
+    function = None
+    processed = []
 
-    LOG.debug(f"Stopped: {stopped}")
-    return stopped
+    if state.lower() == 'stop':
+        function = client.stop_instances
+        resp_key = 'StoppingInstances'
+        action = 'Stopped'
 
+    elif state.lower() == 'terminate':
+        function = client.terminate_instances
+        resp_key = 'TerminatingInstances'
+        action = 'Terminated'
 
-def terminate_instances(instances, region):
-    """Terminate all given instances"""
-    client = boto3.client('ec2', region_name=region)
+    else:
+        raise ValueError(f"Unknown instance state: {state}")
 
-    terminated = []
-    resp = client.terminate_instances(InstanceIds=instances)
-    if resp['TerminatingInstances']:
-        terminated = [t['InstanceId'] for t in resp['TerminatingInstances']]
+    resp = function(InstanceIds=instances)
+    if resp[resp_key]:
+        processed = [i['InstanceId'] for i in resp[resp_key]]
 
-    LOG.debug(f"Terminated :{terminated}")
-    return terminated
+    LOG.debug(f"{action}: {processed}")
+    return processed
 
 
 def lambda_handler(event, context):
@@ -145,14 +148,9 @@ def lambda_handler(event, context):
             # Stop or terminate any instances found
             if ec2_instances:
                 found = True
-                if ec2_action == 'terminate':
-                    LOG.info(f"Terminating Instances: {ec2_instances}")
-                    terminated = terminate_instances(ec2_instances, region)
-                    processed.extend(terminated)
-                else:
-                    LOG.info(f"Stopping Instances: {ec2_instances}")
-                    stopped = stop_instances(ec2_instances, region)
-                    processed.extend(stopped)
+                processed.extend(set_instance_state(ec2_instances,
+                                                    ec2_action,
+                                                    region))
             else:
                 LOG.debug("No instances found")
 
