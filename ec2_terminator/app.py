@@ -82,15 +82,18 @@ def set_instance_state(instances, state, region):
     function = None
     processed = []
 
-    if state.lower() == 'stop':
+    _state = state.lower()
+    LOG.debug(f"State action: {_state}")
+
+    if _state == 'stop':
         function = client.stop_instances
         resp_key = 'StoppingInstances'
-        action = 'Stopped'
+        action = 'stopped'
 
-    elif state.lower() == 'terminate':
+    elif _state == 'terminate':
         function = client.terminate_instances
         resp_key = 'TerminatingInstances'
-        action = 'Terminated'
+        action = 'terminated'
 
     else:
         raise ValueError(f"Unknown instance state: {state}")
@@ -99,8 +102,10 @@ def set_instance_state(instances, state, region):
     if resp[resp_key]:
         processed = [i['InstanceId'] for i in resp[resp_key]]
 
-    LOG.debug(f"{action}: {processed}")
-    return processed
+    message = f"Instances {action}: {processed}"
+    LOG.debug(message)
+
+    return processed, message
 
 
 def lambda_handler(event, context):
@@ -127,9 +132,9 @@ def lambda_handler(event, context):
 
     try:
         # Are we stopping or terminating instances?
-        ec2_action = 'stop'
-        if os.environ.get('EC2_ACTION', '') == 'TERMINATE':
-            ec2_action = 'terminate'
+        ec2_action = os.environ.get('EC2_ACTION', '')
+        if ec2_action == '':
+            ec2_action = 'stop'
 
         # Get the list of regions
         regions = list_regions()
@@ -137,8 +142,9 @@ def lambda_handler(event, context):
             raise ValueError("No available regions")
 
         # List of stopped or terminated instances
-        found = False
+        found = 0
         processed = []
+        message = 'No running or stopped instances found'
 
         # Iterate over every region
         for region in regions:
@@ -147,23 +153,19 @@ def lambda_handler(event, context):
 
             # Stop or terminate any instances found
             if ec2_instances:
-                found = True
-                processed.extend(set_instance_state(ec2_instances,
-                                                    ec2_action,
-                                                    region))
+                found = len(ec2_instances)
+                _processed, message = set_instance_state(ec2_instances,
+                                                         ec2_action,
+                                                         region)
+                processed.extend(_processed)
             else:
                 LOG.debug("No instances found")
 
-        # Report results
-        if found and not processed:
+        # Raise an error if some instances failed to stop or terminate
+        if found > 0 and found > len(processed):
             raise RuntimeError("Some instances failed to stop or terminate")
-        elif not found:
-            message = "No running or stopped instances found"
-        elif ec2_action == 'terminate':
-            message = f"Instances terminated: {processed}"
-        else:
-            message = f"Instances stopped: {processed}"
 
+        # Report results
         LOG.info(message)
         return {
             "statusCode": 200,

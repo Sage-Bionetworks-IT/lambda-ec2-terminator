@@ -157,7 +157,7 @@ def test_terminate(mocker,
     """Test terminating instances"""
 
     env_vars = {
-        'EC2_ACTION': 'TERMINATE',
+        'EC2_ACTION': 'TeRmInAtE',
     }
     mocker.patch.dict(os.environ, env_vars)
 
@@ -229,6 +229,7 @@ def test_ignore_age_instance(mocker,
     assert ret["statusCode"] == 200
     assert "message" in ret["body"]
     assert data["message"] == "No running or stopped instances found"
+
 
 def test_terminate_failed(mocker,
                           stub_ec2_client,
